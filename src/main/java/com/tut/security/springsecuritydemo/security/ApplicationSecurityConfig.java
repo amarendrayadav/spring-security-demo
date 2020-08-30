@@ -1,6 +1,10 @@
 package com.tut.security.springsecuritydemo.security;
 
 import com.tut.security.springsecuritydemo.auth.ApplicationUserService;
+import com.tut.security.springsecuritydemo.jwt.JWTUsernamePasswordAuthenticationFilter;
+import com.tut.security.springsecuritydemo.jwt.JwtConfig;
+import com.tut.security.springsecuritydemo.jwt.JwtTokenVerifierFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -9,27 +13,44 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.concurrent.TimeUnit;
+import javax.crypto.SecretKey;
 
 import static com.tut.security.springsecuritydemo.security.ApplicationUserRole.STUDENT;
 
+@RequiredArgsConstructor
 @Configuration
 @EnableWebSecurity
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class ApplicationSecurityConfig extends WebSecurityConfigurerAdapter {
 
-
     private final PasswordEncoder passwordEncoder; //must
-
     private final ApplicationUserService applicationUserService;
+    private final JwtConfig jwtConfig;
+    private final SecretKey secretKey;
 
-    public ApplicationSecurityConfig(PasswordEncoder passwordEncoder, ApplicationUserService applicationUserService) {
-        this.passwordEncoder = passwordEncoder;
-        this.applicationUserService = applicationUserService;
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .csrf().disable()
+                .sessionManagement()
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and()
+                .addFilter(new JWTUsernamePasswordAuthenticationFilter(authenticationManager(), jwtConfig, secretKey)) //todo: secretKey
+                .addFilterAfter(new JwtTokenVerifierFilter(secretKey, jwtConfig), JWTUsernamePasswordAuthenticationFilter.class)
+                .authorizeRequests()  // authorize
+                .antMatchers("/", "index", "/css/*", "/js/*") // following are allowed - whitelisting/allow-list
+                .permitAll()
+                .antMatchers("/api/**").hasRole(STUDENT.name())  // here we are restricting access to api/** limited to STUDENT role only
+                .anyRequest() //any request
+                .authenticated(); //must be authenticated
     }
 
+
+    /*
+    Following code is for form based and basic auth
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
@@ -41,11 +62,11 @@ public class ApplicationSecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/", "index", "/css/*", "/js/*") // following are allowed - whitelisting/allow-list
                 .permitAll()
                 .antMatchers("/api/**").hasRole(STUDENT.name())  // here we are restricting access to api/** limited to STUDENT role only
-/*              IMP: Following are commented because using @PreAuthorize to secure methods/APIs
+*//*              IMP: Following are commented because using @PreAuthorize to secure methods/APIs
                 .antMatchers(POST, "/management/api/**").hasAuthority(COURSE_WRITE.name())
                 .antMatchers(PUT, "/management/api/**").hasAuthority(COURSE_WRITE.name())
                 .antMatchers(DELETE, "/management/api/**").hasAuthority(COURSE_WRITE.name())
-                .antMatchers(GET, "/management/api/**").hasAnyRole(ADMIN.name(), ADMIN_TRAINEE.name())*/
+                .antMatchers(GET, "/management/api/**").hasAnyRole(ADMIN.name(), ADMIN_TRAINEE.name())*//*
                 .anyRequest() //any request
                 .authenticated() //must be authenticated
                 .and()
@@ -66,7 +87,7 @@ public class ApplicationSecurityConfig extends WebSecurityConfigurerAdapter {
                 .deleteCookies("JSESSIONID", "remember-me")
                 .logoutSuccessUrl("/login");
 
-    }
+    }*/
 
     /*
     We are overriding following method to incorporate creation of user
